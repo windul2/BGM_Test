@@ -1,0 +1,47 @@
+name: Generate Goal Survivor BGM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bgm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install audio tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fluidsynth fluid-soundfont-gm ffmpeg
+          pip install midiutil
+
+      - name: Compose MIDI
+        run: python make_bgm.py
+
+      - name: Render MIDI to WAV (FluidSynth)
+        run: |
+          fluidsynth -ni -g 0.8 \
+            /usr/share/sounds/sf2/FluidR3_GM.sf2 \
+            bgm.mid -F bgm_raw.wav -r 44100
+
+      - name: Master + encode to OGG
+        run: |
+          # trim silence tail, normalize, light compression for mobile
+          ffmpeg -y -i bgm_raw.wav \
+            -af "silenceremove=stop_periods=1:stop_threshold=-50dB,loudnorm=I=-14:TP=-1.0" \
+            -c:a libvorbis -q:a 4 -ar 44100 bgm.ogg
+          ls -la bgm.ogg
+
+      - name: Base64 encode for HTML embed
+        run: |
+          base64 -w0 bgm.ogg > bgm_ogg_b64.txt
+          echo "Base64 size: $(wc -c < bgm_ogg_b64.txt) bytes"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: goalsurvivor-bgm
+          path: |
+            bgm.mid
+            bgm.ogg
+            bgm_ogg_b64.txt
